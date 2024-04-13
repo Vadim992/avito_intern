@@ -1,30 +1,22 @@
 package internal
 
 import (
+	"encoding/json"
 	"github.com/Vadim992/avito/internal/dto"
 	"github.com/Vadim992/avito/internal/mws"
+	"github.com/Vadim992/avito/internal/req"
 	"github.com/Vadim992/avito/internal/storage"
+	"github.com/stretchr/testify/require"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
-type reqBodyUserBanner struct {
-	t         *testing.T
-	tableTest []testUserBanner
-}
+func getJSONResp(data interface{}) []byte {
+	res, _ := json.Marshal(data)
 
-type paramsUserBanner struct {
-	tagId     int
-	featureId int
-	role      int
-}
-
-type testUserBanner struct {
-	name           string
-	data           paramsUserBanner
-	expectedStatus int
-	expectedData   dto.BannerContent
+	return res
 }
 
 func TestGetUsersBanner(t *testing.T) {
@@ -35,8 +27,7 @@ func TestGetUsersBanner(t *testing.T) {
 		header         string
 		headerVal      string
 		expectedStatus int
-		expectedData   *dto.BannerContent
-		expectedErr    *ErrorStruct
+		expectedData   []byte
 	}{
 		{
 			name:           "Unauthorized",
@@ -44,8 +35,7 @@ func TestGetUsersBanner(t *testing.T) {
 			header:         "token",
 			headerVal:      "",
 			expectedStatus: http.StatusUnauthorized,
-			expectedData:   nil,
-			expectedErr:    nil,
+			expectedData:   []byte(""),
 		},
 		{
 			name:           "Forbidden",
@@ -53,8 +43,23 @@ func TestGetUsersBanner(t *testing.T) {
 			header:         "token",
 			headerVal:      "forbidden_token",
 			expectedStatus: http.StatusForbidden,
-			expectedData:   nil,
-			expectedErr:    nil,
+			expectedData:   []byte(""),
+		},
+		{
+			name:           "Forbidden_user(is_active=false)_map",
+			path:           "/user_banner?tag_id=2&feature_id=2",
+			header:         "token",
+			headerVal:      "user_token",
+			expectedStatus: http.StatusForbidden,
+			expectedData:   []byte(""),
+		},
+		{
+			name:           "Forbidden_user(is_active=false)_db",
+			path:           "/user_banner?tag_id=4&feature_id=4",
+			header:         "token",
+			headerVal:      "user_token",
+			expectedStatus: http.StatusForbidden,
+			expectedData:   []byte(""),
 		},
 		{
 			name:           "NotFound_user",
@@ -62,64 +67,96 @@ func TestGetUsersBanner(t *testing.T) {
 			header:         "token",
 			headerVal:      "user_token",
 			expectedStatus: http.StatusNotFound,
-			expectedData:   nil,
-			expectedErr:    nil,
+			expectedData:   []byte(""),
 		},
 		{
 			name:           "NotFound_admin",
 			path:           "/user_banner?tag_id=1000&feature_id=1",
 			header:         "token",
-			headerVal:      "user_token",
+			headerVal:      "admin_token",
 			expectedStatus: http.StatusNotFound,
-			expectedData:   nil,
-			expectedErr:    nil,
+			expectedData:   []byte(""),
+		},
+
+		{
+			name:           "BadReq_no_tag_user",
+			path:           "/user_banner?feature_id=3",
+			header:         "token",
+			headerVal:      "user_token",
+			expectedStatus: http.StatusBadRequest,
+			expectedData:   getJSONResp(ErrorStruct{req.QueryDataErr.Error()}),
+		},
+		{
+			name:           "BadReq_no_tag_admin",
+			path:           "/user_banner?feature_id=3",
+			header:         "token",
+			headerVal:      "admin_token",
+			expectedStatus: http.StatusBadRequest,
+			expectedData:   getJSONResp(ErrorStruct{req.QueryDataErr.Error()}),
+		},
+		{
+			name:           "BadReq_no_Feature_user",
+			path:           "/user_banner?tag_id=2",
+			header:         "token",
+			headerVal:      "user_token",
+			expectedStatus: http.StatusBadRequest,
+			expectedData:   getJSONResp(ErrorStruct{req.QueryDataErr.Error()}),
+		},
+		{
+			name:           "BadReq_no_feature_admin",
+			path:           "/user_banner?tag_id=2",
+			header:         "token",
+			headerVal:      "user_token",
+			expectedStatus: http.StatusBadRequest,
+			expectedData:   getJSONResp(ErrorStruct{req.QueryDataErr.Error()}),
+		},
+		{
+			name:           "OK_user_map",
+			path:           "/user_banner?tag_id=2&feature_id=5",
+			header:         "token",
+			headerVal:      "user_token",
+			expectedStatus: http.StatusOK,
+			expectedData: getJSONResp(dto.NewBannerContent("title5", "text5",
+				"url5")),
+		},
+		{
+			name:           "OK_admin_map",
+			path:           "/user_banner?tag_id=3&feature_id=1",
+			header:         "token",
+			headerVal:      "admin_token",
+			expectedStatus: http.StatusOK,
+			expectedData: getJSONResp(dto.NewBannerContent("title1", "text1",
+				"url1")),
+		},
+		{
+			name:           "OK_user_db",
+			path:           "/user_banner?tag_id=3&feature_id=3&use_last_revision=true",
+			header:         "token",
+			headerVal:      "user_token",
+			expectedStatus: http.StatusOK,
+			expectedData: getJSONResp(dto.NewBannerContent("title3", "text3",
+				"url3")),
+		},
+		{
+			name:           "OK_admin_db",
+			path:           "/user_banner?tag_id=3&feature_id=1&use_last_revision=true",
+			header:         "token",
+			headerVal:      "admin_token",
+			expectedStatus: http.StatusOK,
+			expectedData: getJSONResp(dto.NewBannerContent("title1", "text1",
+				"url1")),
 		},
 	}
-	//{
-	//name: "success_user",SS
-	//	path: "/"
-	//expectedStatus: http.StatusOK,
-	//	expectedData:   dto.NewBannerContent("title3", "text3", "url3"),
-	//},
-	//	{
-	//		name: "success_admin",
-	//		data: paramsUserBanner{
-	//			tagId:     1,
-	//			featureId: 2,
-	//			role:      1,
-	//		},
-	//		expectedStatus: http.StatusOK,
-	//		expectedData:   dto.NewBannerContent("title2", "text2", "url2"),
-	//	},
-	//	{
-	//		name: "forbidden_user",
-	//		data: paramsUserBanner{
-	//			tagId:     1,
-	//			featureId: 2,
-	//			role:      2,
-	//		},
-	//		expectedStatus: http.StatusForbidden,
-	//		expectedData:   dto.NewBannerContent("title2", "text2", "url2"),
-	//	},
-	//	{
-	//		name: "not_found_user",
-	//		data: paramsUserBanner{
-	//			tagId:     1,
-	//			featureId: 20,
-	//			role:      2,
-	//		},
-	//		expectedStatus: http.StatusNotFound,
-	//	},
-	//}
 
 	pathRoles := []int{mws.ADMIN, mws.USER}
 	tokenMap := map[string]int{
-		"admin_toke": mws.ADMIN,
-		"user_token": mws.USER,
+		"admin_token": mws.ADMIN,
+		"user_token":  mws.USER,
 	}
 
 	mockDb := NewMockDB()
-	inMemory := storage.NewStorage()
+	inMemory := storage.NewInMemoryStorage()
+	mockDb.FillInMemory(inMemory)
 
 	app := NewApp(&mockDb, inMemory, tokenMap)
 
@@ -135,10 +172,14 @@ func TestGetUsersBanner(t *testing.T) {
 			handler(w, r)
 
 			resp := w.Result()
+			defer resp.Body.Close()
 
-			if resp.StatusCode != test.expectedStatus {
-				t.Fatalf("wrong")
-			}
+			require.Equal(t, test.expectedStatus, resp.StatusCode)
+
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+
+			require.Equal(t, test.expectedData, body)
 
 		})
 	}

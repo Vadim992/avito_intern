@@ -34,7 +34,7 @@ func (app *App) GetUserBanner(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, req.QueryDataErr):
 			ClientErr(w, http.StatusBadRequest, err)
-		case errors.Is(err, req.PermissionErr):
+		case errors.Is(err, postgres.PermissionErr):
 			ClientErr(w, http.StatusForbidden, err)
 		case errors.Is(err, sql.ErrNoRows):
 			ClientErr(w, http.StatusNotFound, err)

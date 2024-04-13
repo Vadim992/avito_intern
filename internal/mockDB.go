@@ -2,8 +2,11 @@ package internal
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"github.com/Vadim992/avito/internal/dto"
+	"github.com/Vadim992/avito/internal/mws"
+	"github.com/Vadim992/avito/internal/postgres"
 	"github.com/Vadim992/avito/internal/storage"
 	"time"
 )
@@ -75,8 +78,46 @@ func fillBannersTable(m map[storage.SearchIds]int, numTag, numFeature int) {
 	}
 }
 
+func (m *MockDB) FillInMemory(inMemory *storage.InMemoryStorage) {
+	for key, val := range m.BannersTable {
+		inMemory.SearchStorage[key] = val
+	}
+
+	for key, val := range m.BannersDataTable {
+		oldContent := val.Content
+		newContent := dto.NewBannerContent(*oldContent.Title,
+			*oldContent.Text, *oldContent.Url)
+		b := storage.NewBannersInfo(val.BannerId, newContent,
+			val.IsActive)
+
+		inMemory.Banners[key] = b
+	}
+}
+
 func (m *MockDB) GetUserBanner(tagId, featureId, role int) (*dto.GetBanner, error) {
-	return nil, nil
+	searchIds := storage.NewSearchIds(tagId, featureId)
+
+	bannerId, ok := m.BannersTable[searchIds]
+	if !ok {
+		return nil, sql.ErrNoRows
+	}
+
+	bannerData, ok := m.BannersDataTable[bannerId]
+	if !ok {
+		return nil, sql.ErrNoRows
+	}
+
+	if !bannerData.IsActive && role == mws.USER {
+		return nil, postgres.PermissionErr
+	}
+
+	res := dto.GetBanner{BannerId: &bannerData.BannerId}
+	res.IsActive = &bannerData.IsActive
+	c := bannerData.Content
+	content := dto.NewBannerContent(*c.Title, *c.Text, *c.Url)
+	res.Content = &content
+
+	return &res, nil
 }
 
 func (m *MockDB) GetBanners(ctx context.Context, whereStmt, limitOffsetStmt string) ([]dto.GetBanner, error) {

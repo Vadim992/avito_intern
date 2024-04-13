@@ -95,7 +95,7 @@ func getDataFromStorage(inMemory storage.Storage, tagId, featureId, role int) (d
 
 func validateBanner(bannerInfo *storage.BannerInfo, role int) error {
 	if !bannerInfo.IsActive && role == mws.USER {
-		return PermissionErr
+		return postgres.PermissionErr
 	}
 
 	t := bannerInfo.UpdatedAt

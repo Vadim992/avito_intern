@@ -90,16 +90,10 @@ GROUP BY id,title, text, url, is_active, feature_id;`
 }
 
 func (db *DB) GetUserBanner(tagId, featureId, role int) (*dto.GetBanner, error) {
-	req := ""
-
-	if role == mws.USER {
-		req = fmt.Sprintf("AND is_active=true")
-	}
-
-	stmt := fmt.Sprintf(`SELECT id, title, text, url, is_active FROM banners 
+	stmt := `SELECT id, title, text, url, is_active FROM banners 
     JOIN banners_data 
         ON banners.banner_id = banners_data.id 
-    WHERE tag_id = $1 AND feature_id = $2 %s LIMIT 1;`, req)
+    WHERE tag_id = $1 AND feature_id = $2 %s LIMIT 1;`
 
 	row := db.DB.QueryRow(stmt, tagId, featureId)
 
@@ -109,6 +103,10 @@ func (db *DB) GetUserBanner(tagId, featureId, role int) (*dto.GetBanner, error) 
 
 	if err != nil {
 		return nil, err
+	}
+
+	if !*banner.IsActive && role == mws.USER {
+		return nil, PermissionErr
 	}
 
 	banner.Content = &content
