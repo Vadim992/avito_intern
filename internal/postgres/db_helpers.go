@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"fmt"
+	"github.com/Vadim992/avito/internal/dto"
 	"strings"
 )
 
@@ -34,4 +35,48 @@ func CreateInReqFromInt64(tagIds []int64) string {
 	}
 
 	return strings.TrimSpace(b.String())
+}
+
+func validateBannersDataPatch(banner dto.PostPatchBanner) (string, error) {
+	content := banner.Content
+	var b strings.Builder
+
+	if content != nil {
+		if content.Title != nil {
+			_, err := b.WriteString(fmt.Sprintf("title='%s',", *content.Title))
+
+			if err != nil {
+				return "", err
+			}
+		}
+
+		if content.Text != nil {
+			_, err := b.WriteString(fmt.Sprintf("text='%s',", *content.Text))
+
+			if err != nil {
+				return "", err
+			}
+		}
+
+		if content.Url != nil {
+			_, err := b.WriteString(fmt.Sprintf("url='%s',", *content.Url))
+
+			if err != nil {
+				return "", err
+			}
+		}
+
+	}
+
+	if banner.IsActive != nil {
+		_, err := b.WriteString(fmt.Sprintf("is_active=%t,", *banner.IsActive))
+
+		if err != nil {
+			return "", err
+		}
+	}
+
+	str := strings.TrimSpace(b.String())
+
+	return str, nil
 }

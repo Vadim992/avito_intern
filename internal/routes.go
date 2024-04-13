@@ -25,9 +25,9 @@ func (app *App) Routes() http.Handler {
 	router.HandleFunc("/banner", mws.Auth(pathRoles["/banner"],
 		app.tokenMap, app.PostBanners)).Methods("POST")
 
-	router.HandleFunc("/banner/{id:[0-9]+}", mws.Auth(pathRoles["/banner/id"],
+	router.HandleFunc("/banner/{id}", mws.Auth(pathRoles["/banner/id"],
 		app.tokenMap, app.PatchBannerId)).Methods("PATCH")
-	router.HandleFunc("/banner/{id:[0-9]+}", mws.Auth(pathRoles["/banner/id"],
+	router.HandleFunc("/banner/{id}", mws.Auth(pathRoles["/banner/id"],
 		app.tokenMap, app.DeleteBannerId)).Methods("DELETE")
 
 	mwChain := alice.New(mws.RecoverPanic, mws.LogRequest, mws.SetHeaders)

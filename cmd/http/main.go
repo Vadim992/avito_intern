@@ -50,6 +50,11 @@ func main() {
 	}
 
 	DB := postgres.NewDB(db)
+	//err = DB.FillArr()
+	//
+	//if err != nil {
+	//	logger.ErrLog.Fatalf("cannot fill DB: %v", err)
+	//}
 
 	//if err := DB.FillDb(); err != nil {
 	//	logger.ErrLog.Fatalf("cannot fill DB: %v", err)
@@ -61,7 +66,6 @@ func main() {
 	if err != nil {
 		logger.ErrLog.Fatalf("cant save data to inMemory storage %v:", err)
 	}
-	fmt.Println(inMemory.Get(1000, 1000))
 
 	app := internal.NewApp(DB, inMemory, tokenMap)
 

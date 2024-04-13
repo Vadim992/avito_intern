@@ -20,13 +20,13 @@ func ServerErr(w http.ResponseWriter, err error) {
 	trace := fmt.Sprintf("%e\n%s", err, debug.Stack())
 
 	if err := logger.ErrLog.Output(2, trace); err != nil {
-		logger.ErrLog.Println("failed to show error stack trace: %v", err)
+		logger.ErrLog.Printf("failed to show error stack trace: %v\n", err)
 	}
 
 	funcErr := responseJSONWithErr(w, err, http.StatusInternalServerError)
 
 	if funcErr != nil {
-		logger.ErrLog.Println("err with marshaling JSON")
+		logger.ErrLog.Printf("err with marshaling JSON: %v\n", err)
 	}
 
 }
@@ -39,7 +39,7 @@ func ClientErr(w http.ResponseWriter, code int, err error) {
 		funcErr := responseJSONWithErr(w, err, http.StatusBadRequest)
 
 		if funcErr != nil {
-			logger.ErrLog.Println("err with marshaling JSON")
+			logger.ErrLog.Printf("err with marshaling JSON: %v\n", err)
 
 			return
 		}

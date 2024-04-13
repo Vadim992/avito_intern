@@ -1,8 +1,8 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"github.com/Vadim992/avito/internal/dto"
 	"github.com/Vadim992/avito/internal/mws"
@@ -46,8 +46,11 @@ VALUES %s`, values)
 }
 
 func (db *DB) FillStorage(inMemory storage.Storage) error {
-	// fill SearchIds
-	stmt := `SELECT * FROM banners;`
+	stmt := `SELECT id,title, text, url, is_active, feature_id, ARRAY_AGG(tag_id) AS taf_ids 
+FROM banners 
+JOIN banners_data
+ ON banners_data.id = banners.banner_id
+GROUP BY id,title, text, url, is_active, feature_id;`
 
 	rows, err := db.DB.Query(stmt)
 
@@ -56,57 +59,27 @@ func (db *DB) FillStorage(inMemory storage.Storage) error {
 	}
 	defer rows.Close()
 
-	var emptyBannerContent dto.BannerContent
 	for rows.Next() {
 
 		var banner dto.PostPatchBanner
-		var bannerId int
-		var tagId int64
-
-		err := rows.Scan(&bannerId, &banner.FeatureId, &tagId)
-
-		if err != nil {
-			return err
-		}
-
-		banner.TagIds = []int64{tagId}
-		banner.Content = &emptyBannerContent
-
-		isActive := true
-		banner.IsActive = &isActive
-
-		inMemory.Save(bannerId, &banner)
-	}
-
-	if err = rows.Err(); err != nil {
-		return err
-	}
-
-	//fill BannersInfo
-	stmt = `SELECT id, title, text, url, is_active FROM banners_data;`
-
-	rows, err = db.DB.Query(stmt)
-
-	if err != nil {
-		return err
-	}
-
-	for rows.Next() {
-		var bannerId int
 		var content dto.BannerContent
-		var banner dto.PostPatchBanner
+		var bannerId int
 
 		err := rows.Scan(&bannerId, &content.Title, &content.Text,
-			&content.Url, &banner.IsActive)
+			&content.Url, &banner.IsActive, &banner.FeatureId,
+			pq.Array(&banner.TagIds))
 
 		if err != nil {
 			return err
 		}
 
 		banner.Content = &content
-		banner.TagIds = []int64{}
 
-		inMemory.Save(bannerId, &banner)
+		err = inMemory.Save(bannerId, &banner)
+
+		if err != nil {
+			return err
+		}
 	}
 
 	if err = rows.Err(); err != nil {
@@ -123,10 +96,10 @@ func (db *DB) GetUserBanner(tagId, featureId, role int) (*dto.GetBanner, error) 
 		req = fmt.Sprintf("AND is_active=true")
 	}
 
-	stmt := fmt.Sprintf(`SELECT id, title, text, url, is_active FROM banners  
-         JOIN banners_data 
-          ON banners.banner_id = banners_data.id 
-         WHERE tag_id = $1 AND feature_id = $2 %s LIMIT 1;`, req)
+	stmt := fmt.Sprintf(`SELECT id, title, text, url, is_active FROM banners 
+    JOIN banners_data 
+        ON banners.banner_id = banners_data.id 
+    WHERE tag_id = $1 AND feature_id = $2 %s LIMIT 1;`, req)
 
 	row := db.DB.QueryRow(stmt, tagId, featureId)
 
@@ -143,12 +116,11 @@ func (db *DB) GetUserBanner(tagId, featureId, role int) (*dto.GetBanner, error) 
 	return &banner, nil
 }
 
-func (db *DB) GetBanners(whereStmt, limitOffsetStmt string) ([]dto.GetBanner, error) {
-
+func (db *DB) GetBanners(ctx context.Context, whereStmt, limitOffsetStmt string) ([]dto.GetBanner, error) {
 	stmt := fmt.Sprintf(`SELECT banners_data.*, feature_id, ARRAY_AGG(tag_id) AS tag_ids FROM banners_data
-JOIN banners
-ON banners_data.id = banners.banner_id %s
-GROUP BY id, feature_id, title, text, url, is_active, created_at, updated_at %s;`, whereStmt, limitOffsetStmt)
+	JOIN banners
+	 ON banners_data.id = banners.banner_id %s
+	GROUP BY id, feature_id, title, text, url, is_active, created_at, updated_at %s;`, whereStmt, limitOffsetStmt)
 
 	rows, err := db.DB.Query(stmt)
 
@@ -181,42 +153,40 @@ GROUP BY id, feature_id, title, text, url, is_active, created_at, updated_at %s;
 	if len(result) == 0 {
 		return nil, sql.ErrNoRows
 	}
+
 	return result, nil
 }
 
-func (db *DB) InsertBanner(banner dto.PostPatchBanner) (int, error) {
-	tx, err := db.DB.Begin()
-
-	if err != nil {
-		return 0, err
-	}
-
-	defer tx.Rollback()
-
-	inStmt := CreateInReqFromInt64(banner.TagIds)
-	stmt := fmt.Sprintf(`SELECT banner_id FROM banners
- WHERE feature_id = $1 AND tag_id IN %s LIMIT 1;`, inStmt)
-
-	row := tx.QueryRow(stmt, *banner.FeatureId)
-
-	var bannerId int
-	if err := row.Scan(&bannerId); err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return 0, err
+func (db *DB) FillArr() error {
+	var b strings.Builder
+	b.WriteString("{")
+	for i := 1; i <= numTags; i++ {
+		if i != numTags {
+			b.WriteString(fmt.Sprintf("%d,", i))
+			continue
 		}
+		b.WriteString(fmt.Sprintf("%d}", i))
 	}
 
-	if bannerId != 0 {
-		return 0, InsertBannerErr
+	stmt := `UPDATE banners_data SET tag_ids = $1;`
+
+	_, err := db.DB.Exec(stmt, b.String())
+	if err != nil {
+		return err
 	}
 
-	stmt = `INSERT INTO banners_data (title, text, url,is_active, created_at, updated_at)
+	return nil
+}
+
+func (db *DB) InsertBanner(banner dto.PostPatchBanner) (int, error) {
+	stmt := `INSERT INTO banners_data (title, text, url,is_active, created_at, updated_at)
 	VALUES($1, $2, $3, $4, date_trunc('seconds',current_timestamp),
 	    date_trunc('seconds',current_timestamp))
 	RETURNING id;`
 
+	var bannerId int
 	content := banner.Content
-	row = tx.QueryRow(stmt, content.Title, content.Text, content.Url,
+	row := db.DB.QueryRow(stmt, content.Title, content.Text, content.Url,
 		banner.IsActive)
 
 	if err := row.Scan(&bannerId); err != nil {
@@ -227,172 +197,14 @@ func (db *DB) InsertBanner(banner dto.PostPatchBanner) (int, error) {
 	VALUES($1, $2, $3);`
 
 	for _, tagId := range banner.TagIds {
-		_, err := tx.Exec(stmt, bannerId, banner.FeatureId, tagId)
+		_, err := db.DB.Exec(stmt, bannerId, banner.FeatureId, tagId)
 
 		if err != nil {
 			return 0, err
 		}
 	}
 
-	err = tx.Commit()
-
-	return bannerId, err
-}
-
-func (db *DB) ValidateBannersDataPatch(banner dto.PostPatchBanner) (string, error) {
-	content := banner.Content
-	var b strings.Builder
-
-	if content != nil {
-		if content.Title != nil {
-			_, err := b.WriteString(fmt.Sprintf("title='%s',", *content.Title))
-
-			if err != nil {
-				return "", err
-			}
-		}
-
-		if content.Text != nil {
-			_, err := b.WriteString(fmt.Sprintf("text='%s',", *content.Text))
-
-			if err != nil {
-				return "", err
-			}
-		}
-
-		if content.Url != nil {
-			_, err := b.WriteString(fmt.Sprintf("url='%s',", *content.Url))
-
-			if err != nil {
-				return "", err
-			}
-		}
-
-		if banner.IsActive != nil {
-			_, err := b.WriteString(fmt.Sprintf("is_active=%t,", *banner.IsActive))
-
-			if err != nil {
-				return "", err
-			}
-		}
-
-	}
-
-	str := strings.TrimSpace(b.String())
-
-	return str, nil
-}
-
-func (db *DB) ValidateBannersPatch(tx *sql.Tx, id int, banner dto.PostPatchBanner) (int, []int64, error) {
-	var oldFeature int
-	oldTags := make([]int64, 0)
-
-	// FeatureId && TagId MUST BE UNIQUE !!!
-	switch {
-	case banner.FeatureId != nil && banner.TagIds != nil:
-
-		err := db.checkFeatureAndTags(tx, id, banner.TagIds, *banner.FeatureId)
-
-		if err != nil {
-			return 0, nil, err
-		}
-
-		oldFeature, oldTags, err = db.getFeatureAndTagIds(tx, id)
-
-		if err != nil {
-			return 0, nil, err
-		}
-
-	case banner.FeatureId != nil:
-
-		tags, err := db.getTagIds(tx, id)
-		oldTags = tags
-
-		if err != nil {
-			return 0, nil, err
-		}
-
-		err = db.checkFeatureAndTags(tx, id, oldTags, *banner.FeatureId)
-
-		if err != nil {
-			return 0, nil, err
-		}
-
-		oldFeature, err = db.getFeature(tx, id)
-
-		if err != nil {
-			return 0, nil, err
-		}
-
-	case banner.TagIds != nil:
-		feature, err := db.getFeature(tx, id)
-
-		oldFeature = feature
-
-		if err != nil {
-			return 0, nil, err
-		}
-
-		err = db.checkFeatureAndTags(tx, id, banner.TagIds, oldFeature)
-		if err != nil {
-			return 0, nil, err
-		}
-
-		oldTags, err = db.getTagIds(tx, id)
-
-		if err != nil {
-			return 0, nil, err
-		}
-
-	}
-
-	return oldFeature, oldTags, nil
-}
-
-func (db *DB) checkFeatureAndTags(tx *sql.Tx, id int, tagIds []int64, featureId int) error {
-	if len(tagIds) == 0 {
-		return EmptyArrTagIdsErr
-	}
-
-	inStmt := CreateInReqFromInt64(tagIds)
-
-	stmt := fmt.Sprintf(`SELECT banner_id FROM banners
- WHERE feature_id = $1 AND banner_id != $2 AND tag_id IN %s  LIMIT 1;`, inStmt)
-
-	var bannerId int
-	err := tx.QueryRow(stmt, featureId, id).Scan(&bannerId)
-
-	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-	}
-
-	if bannerId != 0 {
-		return UpdateBannerErr
-	}
-
-	return nil
-}
-
-func (db *DB) checkFeature(tx *sql.Tx, id int, featureId int) error {
-	stmt := fmt.Sprintf(`SELECT banner_id FROM banners
-WHERE feature_id = $1 AND banner_id != $2 LIMIT 1;`)
-
-	var bannerId int
-	err := tx.QueryRow(stmt, featureId, id).Scan(&bannerId)
-
-	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-	}
-
-	if bannerId != 0 {
-		return UpdateBannerErr
-	}
-
-	return nil
+	return bannerId, nil
 }
 
 func (db *DB) checkId(tx *sql.Tx, id int) error {
@@ -424,58 +236,30 @@ func (db *DB) getFeatureAndTagIds(tx *sql.Tx, id int) (int, []int64, error) {
 	return featureId, tagIds, nil
 }
 
-func (db *DB) getFeature(tx *sql.Tx, id int) (int, error) {
-	stmt := `SELECT feature_id  FROM banners
-                WHERE banner_id = $1 LIMIT 1;`
-
-	var featureId int
-	err := tx.QueryRow(stmt, id).Scan(&featureId)
-
-	if err != nil {
-		return 0, err
-	}
-
-	return featureId, nil
-}
-
-func (db *DB) getTagIds(tx *sql.Tx, id int) ([]int64, error) {
-	stmt := `SELECT ARRAY_AGG(tag_id) AS tag_ids FROM banners
-                WHERE banner_id = $1;`
-
-	var tagIds = make([]int64, 0)
-	err := tx.QueryRow(stmt, id).Scan(pq.Array(&tagIds))
-
-	if err != nil {
-		return nil, err
-	}
-
-	return tagIds, nil
-}
-
-func (db *DB) UpdateBannerId(id int, banner dto.PostPatchBanner) (int, []int64, *dto.PostPatchBanner, error) {
+func (db *DB) UpdateBannerId(id int, banner dto.PostPatchBanner) (*storage.UpdateDeleteFromDB, error) {
 	tx, err := db.DB.Begin()
 
 	if err != nil {
-		return 0, nil, nil, err
+		return nil, err
 	}
 	defer tx.Rollback()
 
 	err = db.checkId(tx, id)
 
 	if err != nil {
-		return 0, nil, nil, err
+		return nil, err
 	}
 
-	reqStr, err := db.ValidateBannersDataPatch(banner)
+	reqStr, err := validateBannersDataPatch(banner)
 
 	if err != nil {
-		return 0, nil, nil, err
+		return nil, err
 	}
 
-	oldFeature, oldTags, err := db.ValidateBannersPatch(tx, id, banner)
+	oldFeature, oldTags, err := db.getFeatureAndTagIds(tx, id)
 
 	if err != nil {
-		return 0, nil, nil, err
+		return nil, err
 	}
 
 	switch {
@@ -483,36 +267,38 @@ func (db *DB) UpdateBannerId(id int, banner dto.PostPatchBanner) (int, []int64, 
 		err := db.updateOldTagsAndFeatureOrOldTags(tx, id, oldFeature, *banner.FeatureId, banner.TagIds)
 
 		if err != nil {
-			return 0, nil, nil, err
+			return nil, err
 		}
 	case banner.FeatureId != nil:
 		err := db.updateOldFeature(tx, id, *banner.FeatureId)
 
 		if err != nil {
-			return 0, nil, nil, err
+			return nil, err
 		}
 	case banner.TagIds != nil:
 		err := db.updateOldTagsAndFeatureOrOldTags(tx, id, oldFeature, oldFeature, banner.TagIds)
 
 		if err != nil {
-			return 0, nil, nil, err
+			return nil, err
 		}
 	}
 
-	var resBanner dto.PostPatchBanner
+	var resBanner *dto.PostPatchBanner
 
 	if oldFeature != 0 || oldTags != nil || reqStr != "" {
-		res, err := db.updateContent(tx, id, reqStr)
+		resBanner, err = db.updateContent(tx, id, reqStr)
 		if err != nil {
-			return 0, nil, nil, err
+			return nil, err
 		}
 
-		resBanner = *res
 	}
+
+	storageStruct := storage.NewUpdateDeleteFromDB(id, &oldFeature, oldTags,
+		nil, resBanner)
 
 	err = tx.Commit()
 
-	return oldFeature, oldTags, &resBanner, err
+	return storageStruct, err
 }
 
 func (db *DB) updateOldTagsAndFeatureOrOldTags(tx *sql.Tx, bannerId, oldFeatureId, featureId int, tagIds []int64) error {
@@ -556,6 +342,7 @@ RETURNING title, text, url, is_active;`, setStmt)
 
 	var result dto.PostPatchBanner
 	var content dto.BannerContent
+
 	err := tx.QueryRow(stmt, bannerId).Scan(&content.Title,
 		&content.Text, &content.Url, &result.IsActive)
 
@@ -568,11 +355,11 @@ RETURNING title, text, url, is_active;`, setStmt)
 	return &result, nil
 }
 
-func (db *DB) DeleteBanner(id int) (int, []int64, error) {
+func (db *DB) DeleteBanner(id int) (*storage.UpdateDeleteFromDB, error) {
 	tx, err := db.DB.Begin()
 
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 
 	defer tx.Rollback()
@@ -583,7 +370,7 @@ func (db *DB) DeleteBanner(id int) (int, []int64, error) {
 	err = tx.QueryRow(stmt, id).Scan(&bannerId)
 
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 
 	stmt = `SELECT feature_id, ARRAY_AGG(tag_id) AS tag_ids FROM banners WHERE banner_id = $1
@@ -595,7 +382,7 @@ GROUP BY feature_id;`
 	err = tx.QueryRow(stmt, id).Scan(&featureId, pq.Array(&tagIds))
 
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 
 	stmt = `DELETE FROM banners_data WHERE id = $1;`
@@ -603,10 +390,12 @@ GROUP BY feature_id;`
 	_, err = tx.Exec(stmt, id)
 
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
+
+	storageStruct := storage.NewUpdateDeleteFromDB(id, &featureId, tagIds, nil, nil)
 
 	err = tx.Commit()
 
-	return featureId, tagIds, err
+	return storageStruct, err
 }

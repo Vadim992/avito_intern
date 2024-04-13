@@ -8,13 +8,13 @@ type BannerContent struct {
 	Url   *string `json:"url"`
 }
 
-//func (b *BannerContent) EnToJSON() ([]byte, error) {
-//	encoder := json.New
-//}
-
-//func (b *BannerContent) ()  {
-//
-//}
+func NewBannerContent(title, text, url string) BannerContent {
+	return BannerContent{
+		Title: &title,
+		Text:  &text,
+		Url:   &url,
+	}
+}
 
 type PostPatchBanner struct {
 	FeatureId *int           `json:"feature_id"`

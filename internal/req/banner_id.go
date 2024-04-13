@@ -42,31 +42,47 @@ func PatchBannerId(db postgres.DBModel, inMemory storage.Storage, r *http.Reques
 		return err
 	}
 
-	oldFeatureId, oldTagIds, banner, err := db.UpdateBannerId(id, postPatchBanner)
+	if postPatchBanner.TagIds != nil {
+		postPatchBanner.TagIds = deleteDuplicateFromTagIds(postPatchBanner.TagIds)
+	}
+
+	storageStruct, err := db.UpdateBannerId(id, postPatchBanner)
 
 	if err != nil {
 		return err
 	}
 
-	inMemory.Update(id, oldTagIds, oldFeatureId, &postPatchBanner, banner)
+	storageStruct.ReqBanner = &postPatchBanner
+
+	err = inMemory.Update(storageStruct)
+
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
-func DeleteBannerId(db postgres.DBModel, inMemory storage.Storage, r *http.Request) error {
+func DeleteBannerId(db postgres.DBModel, inMemory storage.Storage, w http.ResponseWriter, r *http.Request) error {
 	id, err := getIdFromPath(r)
 
 	if err != nil {
 		return err
 	}
 
-	featureId, tagIds, err := db.DeleteBanner(id)
+	storageStruct, err := db.DeleteBanner(id)
 
 	if err != nil {
 		return err
 	}
 
-	inMemory.Delete(id, featureId, tagIds)
+	err = inMemory.Delete(storageStruct)
+
+	if err != nil {
+		return err
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 
 	return nil
 }

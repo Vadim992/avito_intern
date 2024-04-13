@@ -7,6 +7,7 @@ import (
 	"github.com/Vadim992/avito/internal/postgres"
 	"github.com/Vadim992/avito/internal/req"
 	"github.com/Vadim992/avito/internal/storage"
+	"io"
 	"net/http"
 )
 
@@ -37,6 +38,8 @@ func (app *App) GetUserBanner(w http.ResponseWriter, r *http.Request) {
 			ClientErr(w, http.StatusForbidden, err)
 		case errors.Is(err, sql.ErrNoRows):
 			ClientErr(w, http.StatusNotFound, err)
+		case errors.Is(err, storage.ReadErr):
+			ClientErr(w, http.StatusNotFound, err)
 		default:
 			ServerErr(w, err)
 		}
@@ -62,12 +65,16 @@ func (app *App) PostBanners(w http.ResponseWriter, r *http.Request) {
 	err := req.PostBanner(app.db, app.inMemoryStorage, w, r)
 
 	if err != nil {
+		err = req.ValidateDriverErrors(err)
+
 		switch {
+		case errors.Is(err, io.EOF):
+			ClientErr(w, http.StatusBadRequest, err)
 		case errors.Is(err, req.EmptyFieldErr):
 			ClientErr(w, http.StatusBadRequest, err)
 		case errors.Is(err, postgres.EmptyArrTagIdsErr):
 			ClientErr(w, http.StatusBadRequest, err)
-		case errors.Is(err, postgres.InsertBannerErr):
+		case errors.Is(err, postgres.InsertUpdateBannerErr):
 			ClientErr(w, http.StatusBadRequest, err)
 		default:
 			ServerErr(w, err)
@@ -80,11 +87,17 @@ func (app *App) PatchBannerId(w http.ResponseWriter, r *http.Request) {
 	err := req.PatchBannerId(app.db, app.inMemoryStorage, r)
 
 	if err != nil {
+		err = req.ValidateDriverErrors(err)
+
 		switch {
 		case errors.Is(err, req.PathIdErr):
 			ClientErr(w, http.StatusBadRequest, err)
+		case errors.Is(err, io.EOF):
+			ClientErr(w, http.StatusBadRequest, err)
 		case errors.Is(err, sql.ErrNoRows):
 			ClientErr(w, http.StatusNotFound, err)
+		case errors.Is(err, postgres.InsertUpdateBannerErr):
+			ClientErr(w, http.StatusBadRequest, err)
 		default:
 			ServerErr(w, err)
 		}
@@ -92,7 +105,7 @@ func (app *App) PatchBannerId(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func (app *App) DeleteBannerId(w http.ResponseWriter, r *http.Request) {
-	err := req.DeleteBannerId(app.db, app.inMemoryStorage, r)
+	err := req.DeleteBannerId(app.db, app.inMemoryStorage, w, r)
 
 	if err != nil {
 		switch {

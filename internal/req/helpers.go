@@ -2,7 +2,9 @@ package req
 
 import (
 	"encoding/json"
+	"github.com/Vadim992/avito/internal/postgres"
 	"github.com/Vadim992/avito/pkg/logger"
+	"github.com/lib/pq"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -125,4 +127,34 @@ func sentDataToFront(data interface{}, w http.ResponseWriter, code int) error {
 	w.Write(res)
 
 	return nil
+}
+
+func ValidateDriverErrors(err error) error {
+	pqErr, ok := err.(*pq.Error)
+
+	if !ok {
+		return err
+	}
+
+	switch pqErr.Code {
+	case pq.ErrorCode("23505"):
+		return postgres.InsertUpdateBannerErr
+	}
+
+	return pqErr
+}
+
+func deleteDuplicateFromTagIds(tadIds []int64) []int64 {
+	m := make(map[int64]struct{}, len(tadIds))
+	newTagIds := make([]int64, 0, len(tadIds))
+
+	for _, val := range tadIds {
+		if _, ok := m[val]; !ok {
+			newTagIds = append(newTagIds, val)
+
+			m[val] = struct{}{}
+		}
+	}
+
+	return newTagIds
 }

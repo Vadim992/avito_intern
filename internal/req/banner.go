@@ -1,7 +1,10 @@
 package req
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/Vadim992/avito/internal/dto"
 	"github.com/Vadim992/avito/internal/postgres"
 	"github.com/Vadim992/avito/internal/storage"
@@ -67,9 +70,10 @@ func GetBanners(db postgres.DBModel, w http.ResponseWriter, r *http.Request) err
 
 	limitOffsetStmtStr := strings.TrimSpace(limitOffsetStmt.String())
 
-	data, err := db.GetBanners(whereStmtStr, limitOffsetStmtStr)
+	data, err := db.GetBanners(r.Context(), whereStmtStr, limitOffsetStmtStr)
 
 	if err != nil {
+		fmt.Println(errors.Is(err, context.Canceled))
 		return err
 	}
 
@@ -99,13 +103,19 @@ func PostBanner(db postgres.DBModel, inMemory storage.Storage, w http.ResponseWr
 		return postgres.EmptyArrTagIdsErr
 	}
 
+	postPatchBanner.TagIds = deleteDuplicateFromTagIds(postPatchBanner.TagIds)
+
 	bannerId, err := db.InsertBanner(postPatchBanner)
 
 	if err != nil {
 		return err
 	}
 
-	inMemory.Save(bannerId, &postPatchBanner)
+	err = inMemory.Save(bannerId, &postPatchBanner)
+
+	if err != nil {
+		return err
+	}
 
 	bannerIdStruct := dto.NewBannerId(bannerId)
 

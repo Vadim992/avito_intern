@@ -2,7 +2,6 @@ package req
 
 import (
 	"errors"
-	"fmt"
 	"github.com/Vadim992/avito/internal/dto"
 	"github.com/Vadim992/avito/internal/mws"
 	"github.com/Vadim992/avito/internal/postgres"
@@ -11,7 +10,7 @@ import (
 	"time"
 )
 
-const bannerTimeConstraint = 10 * time.Second
+const bannerTimeConstraint = 5 * time.Minute
 
 func GetUsersBanner(db postgres.DBModel, inMemory storage.Storage,
 	role int, w http.ResponseWriter, r *http.Request) error {
@@ -36,7 +35,7 @@ func GetUsersBanner(db postgres.DBModel, inMemory storage.Storage,
 	}
 
 	if useLastRevision {
-		res, err := db.GetUserBanner(tagId, featureId, role)
+		res, err := db.GetUserBanner(tagId, featureId, mws.ADMIN)
 
 		if err != nil {
 			return err
@@ -57,14 +56,15 @@ func GetUsersBanner(db postgres.DBModel, inMemory storage.Storage,
 			return err
 		}
 
-		fmt.Println(tagId, featureId, role)
 		res, errDB := db.GetUserBanner(tagId, featureId, role)
 
 		if errDB != nil {
 			return errDB
 		}
 
-		updateInMemory(inMemory, res)
+		if errStorage := updateInMemory(inMemory, res); errStorage != nil {
+			return errStorage
+		}
 
 		content = *res.Content
 	}
@@ -108,11 +108,20 @@ func validateBanner(bannerInfo *storage.BannerInfo, role int) error {
 	return nil
 }
 
-func updateInMemory(inMemory storage.Storage, banner *dto.GetBanner) {
+func updateInMemory(inMemory storage.Storage, banner *dto.GetBanner) error {
 	var b dto.PostPatchBanner
 
 	b.Content = banner.Content
 	b.IsActive = banner.IsActive
 
-	inMemory.Update(*banner.BannerId, nil, 0, &dto.PostPatchBanner{}, &b)
+	storageStruct := storage.NewUpdateDeleteFromDB(*banner.BannerId, nil, nil,
+		nil, &b)
+
+	err := inMemory.Update(storageStruct)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
