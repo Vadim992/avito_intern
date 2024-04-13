@@ -35,7 +35,7 @@ func GetUsersBanner(db postgres.DBModel, inMemory storage.Storage,
 	}
 
 	if useLastRevision {
-		res, err := db.GetUserBanner(tagId, featureId, mws.ADMIN)
+		res, err := db.GetUserBanner(tagId, featureId, role)
 
 		if err != nil {
 			return err
