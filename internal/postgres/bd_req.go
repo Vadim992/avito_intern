@@ -17,6 +17,16 @@ const (
 )
 
 func (db *DB) FillDb() error {
+	stmt := `SELECT COUNT(*) FROM banners`
+	var num int
+	err := db.DB.QueryRow(stmt).Scan(&num)
+	if err != nil {
+		return err
+	}
+
+	if num > 0 {
+		return nil
+	}
 	for i := 1; i <= numBanners; i++ {
 		values := fmt.Sprintf(`('title%d','text%d', 'url%d', true,date_trunc('seconds',current_timestamp),
 date_trunc('seconds',current_timestamp))`, i, i, i)

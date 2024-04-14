@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-	err := godotenv.Load(".env")
+	err := godotenv.Load(".env_localhost")
 
 	if err != nil {
 		logger.ErrLog.Fatal(err)
@@ -49,9 +49,9 @@ func main() {
 
 	DB := postgres.NewDB(db)
 
-	//if err := DB.FillDb(); err != nil {
-	//	logger.ErrLog.Fatalf("cannot fill DB: %v", err)
-	//}
+	if err := DB.FillDb(); err != nil {
+		logger.ErrLog.Fatalf("cannot fill DB: %v", err)
+	}
 
 	inMemory := storage.NewStorage()
 	err = DB.FillStorage(inMemory)

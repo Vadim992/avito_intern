@@ -1,7 +1,5 @@
 # Сервис баннеров
 
-
-
 ## Установка и запуск
 
 ### Используя Docker
@@ -24,8 +22,8 @@ make up
 4. Выполнить файл baseline.sql, расположенный в папке ./internal/postgres/v1.0/v1.01.
 5. Склонировать репозиторий проекта.
 6. В файле main.go (./cmd/http/main.go) на 19 строчке необходимо в аргументе функции изменить название файла с
-**.env** на **.env_localhost** (отличие у них в хосте):
-было
+   **.env** на **.env_localhost** (отличие у них в хосте):
+   было
 ```go
 err := godotenv.Load(".env")
 ```
@@ -37,6 +35,16 @@ err := godotenv.Load(".env_localhost")
 ```bash
 make run
 ```
+Для запуска используется порт ```:3000```
+### ВАЖНО
+При запуске автоматически запоняю БД (в **banners** миллион элементов, в **banners_data** - 1000).
+Чтобы убрать автозаполнение БД необходимо закомментировать следующий код в main.go (./cmd/http/main.go) на 52 строчке:
+```go
+	if err := DB.FillDb(); err != nil {
+logger.ErrLog.Fatalf("cannot fill DB: %v", err)
+}
+```
+
 
 ## База Данных и Кэш
 
@@ -63,109 +71,119 @@ Update(banner *UpdateDeleteFromDB) error
 Delete(banner *UpdateDeleteFromDB) error
 }
 ```
+Структра кэша - **InMemoryStorage** (см. ./internal/storage/storage.go):
+```go
+type InMemoryStorage struct {
+SearchStorage map[SearchIds]int
+Banners       map[int]*BannerInfo
+mu            sync.RWMutex
+}
+type SearchIds struct {
+TagId     int
+FeatureId int
+}
+
+type BannerInfo struct {
+BannerId  int
+Content   dto.BannerContent
+IsActive  bool
+UpdatedAt time.Time
+}
+```
+
+Первая мапа ```SearchStorage map[SearchIds]int``` соответсвует таблице ```banners``` в БД, а вторая
+```Banners       map[int]*BannerInfo``` - ```banners_data``` (без поля created_at, так как оно не нужно обычным
+пользователям).
 Считал, что получить информуцию из кэша можно только по пути ```/user_banner```. При запросах поостальным путям
 информация в кэше **обновляется**.
 
 
-## :bulb: API приложения
+## API приложения
 
-- ```GET /user_banner``` - получение баннера для пользователя и/или админа по tag_id. Пример получения списка продуктов:
-```json
-{
-    "all_count": 33,
-    "goods": [
-        {
-            "name": "milk",
-            "size": "0.2m",
-            "product_id": 1,
-            "count": 15
-        },
-        {
-            "name": "doors",
-            "size": "1.8m",
-            "product_id": 3,
-            "count": 18
-        }
-    ]
+-```Header 'token'``` - токены админа и пользователя храню в **.env** файле. Так как по условию не было сказано,
+что их роль пользователя передает front d jwt токене, то для упрощения принял такое решение.
+
+- ```GET /user_banner``` - получение баннера для пользователя и/или админа по tag_id и feature_id. Если данные в кэше
+  не устарели (не прошло 5 мин с момента последнего обновления кэша), то получаю их оттуда (при условии, что
+  ```use_lasr_revision=false```). Для успешного ответа используется структура (см. ./internal/dto/dto.go):
+```go
+type BannerContent struct {
+	Title *string `json:"title"`
+	Text  *string `json:"text"`
+	Url   *string `json:"url"`
 }
 ```
 
-- ```POST /product``` - добавление продуктов в таблицу продуктов. Пример добавления продукта:
-```json
-{
-    "name": "milk",
-    "size": "0.2m",
-    "count": 15
+Для ответа кода **400** используется структура  (см. ./internal/req_err_handle.go):
+```go
+type ErrorStruct struct {
+Err string
 }
 ```
-- ```DELETE /product``` - удаление продукта из списка продуктов и из резерва. Пример работы удаления по следующему ID `[2]`:
-```json
-[
-    {
-        "name": "tables",
-        "size": "1.5m",
-        "product_id": 2,
-        "count": 20
-    }
-]
+
+- ```GET /banner``` - получение требуемых данных от админа, считал что админу нужна только актуальная информация из БД,
+  поэтому при этом запросе кэш **не** учавствует. Структуры для успешного ответа представлены ниже
+  (см. ./internal/dto/dto.go):
+```go
+type BannerContent struct {
+  Title *string `json:"title"`
+  Text  *string `json:"text"`
+  Url   *string `json:"url"`
+}
+type PostPatchBanner struct {
+  FeatureId *int           `json:"feature_id"`
+  TagIds    []int64        `json:"tag_ids"`
+Content   *BannerContent `json:"content"`
+IsActive  *bool          `json:"is_active"`
+}
+
+type GetBanner struct {
+BannerId *int `json:"banner_id"`
+PostPatchBanner
+CreatedAt *time.Time `json:"created_at"`
+UpdatedAt *time.Time `json:"updated_at"`
+}
 ```
+Ответ приходит массивом структур ```GetBanner```.
 
-- ```POST /product/warehouse``` - резервирование продуктов для дальнейшей доставки. На вход подается массив уникальных ID продуктов.
-  Пример резервирования продуктов с ID `[1,2]`:
-```json
-[
-    {
-        "name": "milk",
-        "size": "0.2m",
-        "product_id": 1,
-        "count": 15
-    },
-    {
-        "name": "tables",
-        "size": "1.5m",
-        "product_id": 2,
-        "count": 20
-    }
-]
+
+- ```POST /banner``` - занесение нового банера в таблицу, результат ответа json структуры (см. ./internal/dto/dto.go):
+```go
+type BannerId struct {
+BannerId int `json:"banner_id"`
+}
 ```
-- ```DELETE /product/warehouse``` - удаление продуктов из резерва. На вход подается массив уникальных ID продуктов.
-  Пример удаления продуктов из резерва с ID `[1]`:
-```json
-[
-    {
-        "name": "milk",
-        "size": "0.2m",
-        "product_id": 1,
-        "count": 15
-    }
-]
+После занесения в БД **обновляю кэш**.
+### Примечание
+Если в массиве tag_ids были повторяющиеся тэги, то вставка проходит успешно, если хотя бы один из тэгов создает
+конфликтную ситуацию при втсавке в БД - вставка отменяется и кэш не обновляется (код **400**).
+
+
+- ```PATCH /banner/{id}``` - изменение данных, ситуация с tag_ids аналогична описанной выше. При обновлении tag_id в
+  таблице ```banners``` старые tag_id удаляются и заменяются на полностью новые. После обновления данных в БД происходит
+  обновление кэша. Метод ```PATCH``` возвращает структуру (см. ./internal/storage/storage.go):
+```go
+type UpdateDeleteFromDB struct {
+  BannerId      int
+  FeatureId     *int
+  TagIds        []int64
+ReqBanner     *dto.PostPatchBanner
+UpdatedBanner *dto.PostPatchBanner
+}
 ```
-
-## Стартовые данные базы данных:
-
-`Таблица products`
-
-|  unique_code  |  product_name  |  size   |  count  |
-|:-------------:|:--------------:|:-------:|:-------:|
-|       1       |      milk      |  0.2m   |   15    |
-|       2       |     tables     |  1.5m   |   20    |
-|       3       |     doors      |  1.8m   |   18    |
-|       4       |  microphones   |  0.15m  |    4    |
-
-`Таблица warehouse`
-
-| product_name | can_be_use |
-| :----------: | :--------- |
-|             |            |
-
+Она сипользуется для **обновления** данных в кэше (пользователь о ней ничего не знает).
+- ```DELETE /banner/{id}``` - удаление банера по id. Метод ```DELETE``` возвращает такую структуру как и метод
+- ```PATCH``` (пользователь об это также ничего не знает), которая служит для удаления данных их кэша.
 
 ## Тесты
 `Для использования тестов через postman`
-1. Необходимо скачать коллекцию [postman-тестов](/postman_collection)
+1. Необходимо скачать коллекцию **./postman**
 2. Запустить тесты из коллекции
 
 `Для использования unit-тестов`
+Запуск тестов
 ```bash
-go test ./
+make test
 ```
-Требования к тестам см. в [postman-test.md](/backend/doc/postman-test.md) и [unit-test.md](/backend/doc/unit-test.md)
+Был оттестирован ```GET /user_banner```. Тест расположен в файле ./internal/request_test.go. Для теста создавался mock
+БД (см. ./internal/mockDB.go)
