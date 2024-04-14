@@ -61,6 +61,7 @@ DeleteBanner(id int) (*storage.UpdateDeleteFromDB, error)
 }
 ```
 Схема БД представлена на рисунке ниже:
+![drawSQL-image-export-2024-04-14](https://github.com/Vadim992/avito_intern/assets/105795306/df37ccdb-f9c8-4275-aed0-93cef914396a)
 
 Кэш удовлетворяет интерфейсу **Storage** (см. ./internal/storage/storage.go):
 ```go
