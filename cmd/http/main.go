@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-	err := godotenv.Load(".env_localhost")
+	err := godotenv.Load(".env")
 
 	if err != nil {
 		logger.ErrLog.Fatal(err)
