@@ -1,7 +1,8 @@
 package main
 
 import (
-	"flag"
+	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/Vadim992/avito/internal"
 	"github.com/Vadim992/avito/internal/cfg"
@@ -28,8 +29,8 @@ func main() {
 		" dbname=%s sslmode=disable",
 		cfgDB.HostDB, cfgDB.PortDB, cfgDB.UsernameDB, cfgDB.PasswordDB, cfgDB.NameDB)
 
-	addr := flag.String("addr", ":3000", "HTTP network address")
-	flag.Parse()
+	//addr := flag.String("addr", ":3000", "HTTP network address")
+	//flag.Parse()
 
 	db, err := postgres.InitDB(conn)
 
@@ -63,19 +64,20 @@ func main() {
 	inMemory := storage.NewStorage()
 	err = DB.FillStorage(inMemory)
 
-	if err != nil {
+	if err != nil && errors.Is(err, sql.ErrNoRows) {
 		logger.ErrLog.Fatalf("cant save data to inMemory storage %v:", err)
 	}
 
 	app := internal.NewApp(DB, inMemory, tokenMap)
+	port := "3000"
 
 	srv := &http.Server{
-		Addr:     *addr,
+		Addr:     port,
 		Handler:  app.Routes(),
 		ErrorLog: logger.ErrLog,
 	}
 
-	logger.InfoLog.Printf("Starting server on port %s\n", *addr)
+	logger.InfoLog.Printf("Starting server on port %s\n", port)
 
 	logger.ErrLog.Fatal(srv.ListenAndServe())
 }
