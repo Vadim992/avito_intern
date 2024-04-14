@@ -1,7 +1,6 @@
 package postgres
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"github.com/Vadim992/avito/internal/dto"
@@ -93,7 +92,7 @@ func (db *DB) GetUserBanner(tagId, featureId, role int) (*dto.GetBanner, error) 
 	stmt := `SELECT id, title, text, url, is_active FROM banners 
     JOIN banners_data 
         ON banners.banner_id = banners_data.id 
-    WHERE tag_id = $1 AND feature_id = $2 %s LIMIT 1;`
+    WHERE tag_id = $1 AND feature_id = $2;`
 
 	row := db.DB.QueryRow(stmt, tagId, featureId)
 
@@ -114,7 +113,7 @@ func (db *DB) GetUserBanner(tagId, featureId, role int) (*dto.GetBanner, error) 
 	return &banner, nil
 }
 
-func (db *DB) GetBanners(ctx context.Context, whereStmt, limitOffsetStmt string) ([]dto.GetBanner, error) {
+func (db *DB) GetBanners(whereStmt, limitOffsetStmt string) ([]dto.GetBanner, error) {
 	stmt := fmt.Sprintf(`SELECT banners_data.*, feature_id, ARRAY_AGG(tag_id) AS tag_ids FROM banners_data
 	JOIN banners
 	 ON banners_data.id = banners.banner_id %s
@@ -207,7 +206,7 @@ func (db *DB) InsertBanner(banner dto.PostPatchBanner) (int, error) {
 
 func (db *DB) checkId(tx *sql.Tx, id int) error {
 	stmt := fmt.Sprintf(`SELECT id FROM banners_data
-                WHERE id = $1 LIMIT 1;`)
+                WHERE id = $1;`)
 
 	var bannerId int
 	err := tx.QueryRow(stmt, id).Scan(&bannerId)

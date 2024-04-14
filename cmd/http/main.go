@@ -29,11 +29,6 @@ func main() {
 		" dbname=%s sslmode=disable",
 		cfgDB.HostDB, cfgDB.PortDB, cfgDB.UsernameDB, cfgDB.PasswordDB, cfgDB.NameDB)
 
-	fmt.Println(conn)
-
-	//addr := flag.String("addr", ":3000", "HTTP network address")
-	//flag.Parse()
-
 	db, err := postgres.InitDB(conn)
 
 	if err != nil {
@@ -53,12 +48,7 @@ func main() {
 	}
 
 	DB := postgres.NewDB(db)
-	//err = DB.FillArr()
-	//
-	//if err != nil {
-	//	logger.ErrLog.Fatalf("cannot fill DB: %v", err)
-	//}
-	//
+
 	//if err := DB.FillDb(); err != nil {
 	//	logger.ErrLog.Fatalf("cannot fill DB: %v", err)
 	//}
@@ -71,7 +61,7 @@ func main() {
 	}
 
 	app := internal.NewApp(DB, inMemory, tokenMap)
-	port := "3000"
+	port := ":3000"
 
 	srv := &http.Server{
 		Addr:     port,

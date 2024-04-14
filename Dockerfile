@@ -8,4 +8,4 @@ RUN go mod download
 
 RUN go build -o main ./cmd/http/main.go
 
-CMD ["/app/main"]
+ENTRYPOINT ["/app/main"]

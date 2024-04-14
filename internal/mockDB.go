@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"github.com/Vadim992/avito/internal/dto"
@@ -120,7 +119,7 @@ func (m *MockDB) GetUserBanner(tagId, featureId, role int) (*dto.GetBanner, erro
 	return &res, nil
 }
 
-func (m *MockDB) GetBanners(ctx context.Context, whereStmt, limitOffsetStmt string) ([]dto.GetBanner, error) {
+func (m *MockDB) GetBanners(whereStmt, limitOffsetStmt string) ([]dto.GetBanner, error) {
 	return nil, nil
 }
 

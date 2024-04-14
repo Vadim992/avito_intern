@@ -70,7 +70,7 @@ func GetBanners(db postgres.DBModel, w http.ResponseWriter, r *http.Request) err
 
 	limitOffsetStmtStr := strings.TrimSpace(limitOffsetStmt.String())
 
-	data, err := db.GetBanners(r.Context(), whereStmtStr, limitOffsetStmtStr)
+	data, err := db.GetBanners(whereStmtStr, limitOffsetStmtStr)
 
 	if err != nil {
 		fmt.Println(errors.Is(err, context.Canceled))
