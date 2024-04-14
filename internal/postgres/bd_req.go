@@ -46,7 +46,7 @@ VALUES %s`, values)
 }
 
 func (db *DB) FillStorage(inMemory storage.Storage) error {
-	stmt := `SELECT id,title, text, url, is_active, feature_id, ARRAY_AGG(tag_id) AS taf_ids 
+	stmt := `SELECT id,title, text, url, is_active, feature_id, ARRAY_AGG(tag_id) AS tag_ids 
 FROM banners 
 JOIN banners_data
  ON banners_data.id = banners.banner_id

@@ -29,6 +29,8 @@ func main() {
 		" dbname=%s sslmode=disable",
 		cfgDB.HostDB, cfgDB.PortDB, cfgDB.UsernameDB, cfgDB.PasswordDB, cfgDB.NameDB)
 
+	fmt.Println(conn)
+
 	//addr := flag.String("addr", ":3000", "HTTP network address")
 	//flag.Parse()
 
@@ -56,7 +58,7 @@ func main() {
 	//if err != nil {
 	//	logger.ErrLog.Fatalf("cannot fill DB: %v", err)
 	//}
-
+	//
 	//if err := DB.FillDb(); err != nil {
 	//	logger.ErrLog.Fatalf("cannot fill DB: %v", err)
 	//}
