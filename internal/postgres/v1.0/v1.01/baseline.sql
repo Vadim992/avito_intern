@@ -5,10 +5,6 @@ DROP TABLE IF EXISTS banners_data CASCADE;
 DROP INDEX IF EXISTS banners_data_pkey;
 DROP INDEX IF EXISTS banners_feature_id_tag_id_key;
 DROP INDEX IF EXISTS banner_id_index;
-DROP INDEX IF EXISTS title_index;
-DROP INDEX IF EXISTS text_index;
-DROP INDEX IF EXISTS url_index;
-DROP INDEX IF EXISTS is_active_index;
 
 
 CREATE TABLE banners_data (
@@ -32,9 +28,7 @@ CREATE TABLE banners (
 
 CREATE INDEX banners_id_index ON banners (banner_id);
 CREATE INDEX title_index ON banners_data (title);
-CREATE INDEX text_index ON banners_data (text);
-CREATE  INDEX url_index ON banners_data (url);
-CREATE  INDEX is_active_index ON banners_data (is_active);
+
 
 
 -- INSERT INTO banners_data (title, text, url, is_active, created_at, updated_at)
